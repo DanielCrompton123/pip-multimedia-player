@@ -9,12 +9,27 @@ import SwiftUI
 import AVKit
 
 
+public enum PiPVideoPlayerPresentation: Sendable {
+    /// State is PiP when the player view controller is in PiP mode
+    case pip
+    /// State is full-screen when the user presses the full-screen button in the player view controller & the player goes into a full screen overlay type presentation
+    case fullScreen
+    /// State is inline normally when the app is open and PiP is not used, and when the player is not made full-screen
+    case inline
+    
+    /// the default state resolving to inline
+    static public let `default` = Self.inline
+}
+
+
 public struct PiPVideoPlayer: UIViewControllerRepresentable {
     
     private let player: AVPlayer
+    @Binding private var playerPresentationState: PiPVideoPlayerPresentation
     
-    public init(player: AVPlayer) {
+    public init(player: AVPlayer, playerPresentationState: Binding<PiPVideoPlayerPresentation>) {
         self.player = player
+        self._playerPresentationState = playerPresentationState
     }
     
     private let playerController = AVPlayerViewController()
@@ -46,18 +61,78 @@ public struct PiPVideoPlayer: UIViewControllerRepresentable {
     // MARK: Coordinator
     
     public func makeCoordinator() -> Coordinator {
-        Coordinator()
+        Coordinator(playerPresentationState: $playerPresentationState)
     }
     
-    public class Coordinator: NSObject, AVPlayerViewControllerDelegate {
+    
+    // The coordinator can be accessed from any thread but the presentation state can only be accessed from the main actor.
+    // Therefore the delegate methods for AVPlayerViewControllerDelegate must also be isolated on the main actor
+    public class Coordinator: NSObject, @MainActor AVPlayerViewControllerDelegate {
+        
+        @MainActor @Binding private var playerPresentationState: PiPVideoPlayerPresentation
+                
+        init(playerPresentationState: Binding<PiPVideoPlayerPresentation>) {
+            self._playerPresentationState = playerPresentationState
+        }
+        
+        // PiP error
         
         public func playerViewController(
             _ playerViewController: AVPlayerViewController,
             failedToStartPictureInPictureWithError error: any Error
         ) {
-            print("[PiPViewoPlayer.playerViewControllerFailedToStartPictureInPictureWithError]: Error = \(error)")
+            print("[PiPVieoPlayer.playerViewControllerFailedToStartPictureInPictureWithError]: Error = \(error)")
         }
         
+        // Full-screen
+        
+        @MainActor public func playerViewController(
+            _ playerViewController: AVPlayerViewController,
+            willBeginFullScreenPresentationWithAnimationCoordinator coordinator: any UIViewControllerTransitionCoordinator
+        ) {
+            coordinator.animate(alongsideTransition: nil) { _ in
+                self.playerPresentationState = .fullScreen
+            }
+        }
+        
+        @MainActor public func playerViewController(
+            _ playerViewController: AVPlayerViewController,
+            willEndFullScreenPresentationWithAnimationCoordinator coordinator: any UIViewControllerTransitionCoordinator
+        ) {
+            
+            // when the app is closed and PiP begins, pipWillEnter and pipDidEnter both call before the full screen closes (this calls)
+            // To avoid setting the state to inline when PiP enters (and the full screen ends) make sure we are not already in PiP mode
+            if playerPresentationState == .pip { return }
+            
+            coordinator.animate(alongsideTransition: nil) { transitionContext in
+                self.playerPresentationState = .inline
+                
+                // Automatically, it will pause
+                // Keep it playing!
+                playerViewController.player?.play()
+            }
+        }
+        
+        
+        // PiP
+        
+        @MainActor public func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
+        }
+        @MainActor public func playerViewControllerDidStartPictureInPicture(
+            _ playerViewController: AVPlayerViewController
+        ) {
+            playerPresentationState = .pip
+        }
+        
+        // END PIP
+        @MainActor public func playerViewControllerDidStopPictureInPicture(
+            _ playerViewController: AVPlayerViewController
+        ) {
+            // Always resets to inline after PiP mode ended
+            playerPresentationState = .inline
+        }
     }
 }
  
+
+
