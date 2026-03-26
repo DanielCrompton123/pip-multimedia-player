@@ -10,7 +10,7 @@ import AVFoundation
 
 
 /// Model wrapping the AVFoundation `AVAudioPlayer` that publishes changes to the UI when state changes like the audio is played, paused, and when `currentTime` progresses
-@Observable @MainActor final public class AudioPlayer: NSObject, AVAudioPlayerDelegate {
+@Observable @MainActor final public class AudioPlayer: NSObject {
     
     // MARK: Private properties & init
     
@@ -19,8 +19,9 @@ import AVFoundation
     /// Timer that triggers at a specific interval to update the `currentTime` variable
     private var timer: Timer?
     
-    public init(url: URL) throws {
+    public init(url: URL, backtrackSkipInterval: BacktrackSkipInterval = .fifteen) throws {
         self.underlyingPlayer = try AVAudioPlayer(contentsOf: url)
+        self.backtrackSkipInterval = backtrackSkipInterval
     }
     
     // MARK: Play, pause, stop
@@ -122,108 +123,32 @@ import AVFoundation
     
     // MARK: Backtracking & skipping
     
+    /// An enum for the amount of time to skip forward and backwards when calling the backtrack & skip methods
+    public enum BacktrackSkipInterval: TimeInterval {
+        case five = 5.0, ten = 10.0, fifteen = 15.0, thirty = 30.0
+        public var string: String {
+            switch self {
+                case .five: "5"
+                case .ten: "10"
+                case .fifteen: "15"
+                case .thirty: "30"
+            }
+        }
+    }
+    
     // Number of seconds to backtrack or skip when the respective methods are called
-    public var backtrackSkipInterval: TimeInterval = 15.0
+    public var backtrackSkipInterval: BacktrackSkipInterval
     
     
     /// Method to backtrack a certain number of seconds
     public func backtrack() {
         persistingPlaybackState {
-            seek(to: currentTime - backtrackSkipInterval)
+            seek(to: currentTime - backtrackSkipInterval.rawValue)
         }
     }
     
     /// Method to skip a certain number of seconds
     public func skip() {
-        seek(to: currentTime + backtrackSkipInterval)
-    }
-}
-
-
-public struct AudioPlayerView: View {
-    private let player: AudioPlayer
-    private let metadata: MultimediaMetadata
-    
-    @State private var isSeeking = false
-    
-    public init(
-        player: AudioPlayer,
-        metadata: MultimediaMetadata = .init()
-    ) {
-        self.player = player
-        self.metadata = metadata
-    }
-    
-    public var body: some View {
-        GeometryReader { geom in
-            
-            HStack {
-                Button(action: player.backtrack) {
-                    Label("Backtrack", systemImage: "15.arrow.trianglehead.counterclockwise")
-                        .font(.system(size: 20))
-                }
-                .frame(maxWidth: .infinity)
-                
-                Button(action: player.togglePlayPause) {
-                    let title = player.isPlaying ? "Pause" : "Play"
-                    let icon = player.isPlaying ? "pause.fill" : "play.fill"
-                    Label(title, systemImage: icon)
-                        .padding(10)
-                        .font(.system(size: 30))
-                        .bold()
-                }
-                .frame(maxWidth: .infinity)
-                
-                Button(action: player.skip) {
-                    Label("Skip", systemImage: "15.arrow.trianglehead.clockwise")
-                        .font(.system(size: 20))
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonBorderShape(.circle)
-            .labelStyle(.iconOnly)
-            .frame(maxHeight: .infinity)
-            .buttonStyle(.glass)
-            
-            .overlay(alignment: .bottom) {
-                Slider(value: Binding(
-                    get: { player.currentTime },
-                    set: { player.seek(to: $0) }
-                ), in: 0.0...player.duration) {
-                } minimumValueLabel: {
-                    AnyView(Text(formatTimeInterval(player.currentTime))
-                        .contentTransition(.numericText(countsDown: true)))
-                } maximumValueLabel: {
-                    AnyView(Text(formatTimeInterval(player.duration)))
-                }
-                .animation(.default, value: player.currentTime)
-                .padding()
-            }
-            
-            
-            .background {
-                if let image = metadata.thumbnail {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: geom.size.width, height: geom.size.height)
-                        .clipped()
-                }
-            }
-            
-            .clipShape(RoundedRectangle(cornerRadius: 30))
-        }
-    }
-    
-    private func formatTimeInterval(_ interval: TimeInterval) -> String {
-        // Initialize a format that uses hours if the time interval is in hours, otherwise minutes and seconds
-        let format: Duration.TimeFormatStyle
-        if interval > 60 * 60 {
-            format = .init(pattern: .hourMinuteSecond(padHourToLength: 2))
-        } else {
-            format = .init(pattern: .minuteSecond(padMinuteToLength: 2))
-        }
-        
-        return Duration.seconds(interval).formatted(format)
+        seek(to: currentTime + backtrackSkipInterval.rawValue)
     }
 }
