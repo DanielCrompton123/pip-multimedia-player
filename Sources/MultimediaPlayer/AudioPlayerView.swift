@@ -9,11 +9,11 @@ import SwiftUI
 
 public struct AudioPlayerView: View {
     private let player: AudioPlayer
-    private let metadata: MultimediaMetadata
+    private let metadata: NowPlayingMetadata
         
     public init(
         player: AudioPlayer,
-        metadata: MultimediaMetadata = .init()
+        metadata: NowPlayingMetadata = .init()
     ) {
         self.player = player
         self.metadata = metadata
@@ -24,7 +24,7 @@ public struct AudioPlayerView: View {
             
             HStack {
                 Button(action: player.backtrack) {
-                    Label("Backtrack", systemImage: "\(player.backtrackSkipInterval.rawValue).arrow.trianglehead.counterclockwise")
+                    Label("Backtrack", systemImage: "\(player.backtrackSkipInterval.string).arrow.trianglehead.counterclockwise")
                         .font(.system(size: 20))
                 }
                 .frame(maxWidth: .infinity)
@@ -40,7 +40,7 @@ public struct AudioPlayerView: View {
                 .frame(maxWidth: .infinity)
                 
                 Button(action: player.skip) {
-                    Label("Skip", systemImage: "\(player.backtrackSkipInterval.rawValue).arrow.trianglehead.clockwise")
+                    Label("Skip", systemImage: "\(player.backtrackSkipInterval.string).arrow.trianglehead.clockwise")
                         .font(.system(size: 20))
                 }
                 .frame(maxWidth: .infinity)
@@ -67,13 +67,11 @@ public struct AudioPlayerView: View {
             
             
             .background {
-                if let image = metadata.thumbnail {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: geom.size.width, height: geom.size.height)
-                        .clipped()
-                }
+                Image(uiImage: metadata.thumbnail)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geom.size.width, height: geom.size.height)
+                    .clipped()
             }
             
             .clipShape(RoundedRectangle(cornerRadius: 30))

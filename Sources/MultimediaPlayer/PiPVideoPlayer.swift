@@ -22,16 +22,41 @@ public enum PiPVideoPlayerPresentation: Sendable {
 }
 
 
+/*
+@MainActor
+class PiPVideoPlayerEventObserving: NSObject {
+    let player: AVPlayer
+    
+    init(player: AVPlayer) {
+        self.player = player
+    }
+    
+    private var observers: [NSKeyValueObservation] = []
+    
+    func startEventObserving() {
+        NotificationCenter.default.addObserver(self, selector: #selector(playedToEnd), name: AVPlayerItem.didPlayToEndTimeNotification, object: nil)
+    }
+    
+    
+    @objc private func playedToEnd() {
+        // Called when the notification triggers saying that the player has played to the end
+    }
+    
+}
+*/
+
+
+
 public struct PiPVideoPlayer: UIViewControllerRepresentable {
     
     private let player: AVPlayer
     @Binding private var playerPresentationState: PiPVideoPlayerPresentation
-    private let metadata: MultimediaMetadata
+    private let metadata: NowPlayingMetadata
     
     public init(
         player: AVPlayer,
         playerPresentationState: Binding<PiPVideoPlayerPresentation>,
-        metadata: MultimediaMetadata = .init()
+        metadata: NowPlayingMetadata = .init()
     ) {
         self.player = player
         self._playerPresentationState = playerPresentationState
@@ -55,12 +80,24 @@ public struct PiPVideoPlayer: UIViewControllerRepresentable {
             print("[PiPVideoPlayer.makeUIViewController]: Cannot set audio session to playback movies & active: \(error)")
         }
         
+        // Set up the now playing metadata
+        // Make sure this is set to false so that the player controller doesn't do anything funky with the now playing centre
+        playerController.updatesNowPlayingInfoCenter = false
+        NowPlayingHelper.addCommands(for: player)
+        NowPlayingHelper.updateNowPlayingData(metadata)
+        NowPlayingHelper.updateNowPlayingData(
+            NowPlayingDynamicData(
+                playbackDuration: player.currentItem?.duration.seconds ?? 0.0,
+                elapsedTime: player.currentTime().seconds,
+                playbackRate: player.rate
+            )
+        )
+        
         return playerController
     }
     
     // Remember: Called when the CALLEE swiftUI view updates the state that this view depends on
     public func updateUIViewController(_ playerViewController: AVPlayerViewController, context: Context) {
-        
     }
     
     
@@ -79,15 +116,6 @@ public struct PiPVideoPlayer: UIViewControllerRepresentable {
                 
         init(playerPresentationState: Binding<PiPVideoPlayerPresentation>) {
             self._playerPresentationState = playerPresentationState
-        }
-        
-        // PiP error
-        
-        public func playerViewController(
-            _ playerViewController: AVPlayerViewController,
-            failedToStartPictureInPictureWithError error: any Error
-        ) {
-            print("[PiPVieoPlayer.playerViewControllerFailedToStartPictureInPictureWithError]: Error = \(error)")
         }
         
         // Full-screen
@@ -122,6 +150,12 @@ public struct PiPVideoPlayer: UIViewControllerRepresentable {
         
         // PiP
         
+        public func playerViewController(
+            _ playerViewController: AVPlayerViewController,
+            failedToStartPictureInPictureWithError error: any Error
+        ) {
+            print("[PiPVieoPlayer.playerViewControllerFailedToStartPictureInPictureWithError]: Error = \(error)")
+        }
         @MainActor public func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
         }
         @MainActor public func playerViewControllerDidStartPictureInPicture(
