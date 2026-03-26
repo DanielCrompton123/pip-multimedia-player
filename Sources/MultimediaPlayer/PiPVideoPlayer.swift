@@ -26,10 +26,16 @@ public struct PiPVideoPlayer: UIViewControllerRepresentable {
     
     private let player: AVPlayer
     @Binding private var playerPresentationState: PiPVideoPlayerPresentation
+    private let metadata: MultimediaMetadata
     
-    public init(player: AVPlayer, playerPresentationState: Binding<PiPVideoPlayerPresentation>) {
+    public init(
+        player: AVPlayer,
+        playerPresentationState: Binding<PiPVideoPlayerPresentation>,
+        metadata: MultimediaMetadata = .init()
+    ) {
         self.player = player
         self._playerPresentationState = playerPresentationState
+        self.metadata = metadata
     }
     
     private let playerController = AVPlayerViewController()
