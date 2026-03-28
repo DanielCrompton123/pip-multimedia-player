@@ -9,7 +9,7 @@ import SwiftUI
 import AVKit
 
 
-public enum PiPVideoPlayerPresentation: Sendable {
+public enum MultimediaPlayerPresentation: Sendable {
     /// State is PiP when the player view controller is in PiP mode
     case pip
     /// State is full-screen when the user presses the full-screen button in the player view controller & the player goes into a full screen overlay type presentation
@@ -22,18 +22,26 @@ public enum PiPVideoPlayerPresentation: Sendable {
 }
 
 
-public struct PiPVideoPlayer: UIViewControllerRepresentable {
+public enum MultimediaType: Sendable {
+    case video, audio
+}
+
+
+public struct PiPMultimediaPlayer: UIViewControllerRepresentable {
     
     private let player: AVPlayer
-    @Binding private var playerPresentationState: PiPVideoPlayerPresentation
+    private let multimediaType: MultimediaType
+    @Binding private var playerPresentationState: MultimediaPlayerPresentation
     private let metadata: NowPlayingMetadata
     
     public init(
         player: AVPlayer,
-        playerPresentationState: Binding<PiPVideoPlayerPresentation>,
+        multimediaType: MultimediaType,
+        playerPresentationState: Binding<MultimediaPlayerPresentation>,
         metadata: NowPlayingMetadata = .init()
     ) {
         self.player = player
+        self.multimediaType = multimediaType
         self._playerPresentationState = playerPresentationState
         self.metadata = metadata
     }
@@ -43,13 +51,19 @@ public struct PiPVideoPlayer: UIViewControllerRepresentable {
     public func makeUIViewController(context: Context) -> AVPlayerViewController {
         // Set up the view controller to begin with
         playerController.player = player
-        playerController.allowsPictureInPicturePlayback = true
+        // Only allow PiP for videos
+        playerController.allowsPictureInPicturePlayback = multimediaType == .video
         playerController.canStartPictureInPictureAutomaticallyFromInline = true
         playerController.delegate = context.coordinator
         
         // Set up the category for the audio session
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+            switch multimediaType {
+                case .video:
+                    try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+                case .audio:
+                    try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+            }
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("[MultimediaPlayer - PiPVideoPlayer.makeUIViewController]: Cannot set audio session to playback movies & active: \(error)")
@@ -66,11 +80,38 @@ public struct PiPVideoPlayer: UIViewControllerRepresentable {
             print("[MultimediaPlayer - PiPVideoPlayer: Cannot get the player's current AVPlayerItem to set its metadata")
         }
         
+        // If the multimedia type is audio, there will be no video information showing in the view controller, so we can add the thumbnail for something to display in its original ratio
+        if multimediaType == .audio {
+            addThumbnailLayer()
+        }
+        
         return playerController
     }
     
     // Remember: Called when the CALLEE swiftUI view updates the state that this view depends on
     public func updateUIViewController(_ playerViewController: AVPlayerViewController, context: Context) {
+    }
+    
+    
+    /// Called to add the thumbnail layer into the player view controller to cover up the blackness when it's only audio playing
+    private func addThumbnailLayer() {
+        // Create an image view
+        let imageView = UIImageView(image: metadata.thumbnail)
+        // Set the scale mode so it fills up the entire view controller
+        imageView.contentMode = .scaleAspectFill
+        // Cut off the edges that may be overhanging
+        imageView.clipsToBounds = true
+        
+        // Add thre image inside the overlay view
+        playerController.contentOverlayView?.addSubview(imageView)
+        
+        // Add constraints for the width/height and x/y
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.heightAnchor.constraint(equalTo: imageView.superview!.heightAnchor).isActive = true
+        imageView.widthAnchor.constraint(equalTo: imageView.superview!.widthAnchor).isActive = true
+        imageView.bottomAnchor.constraint(equalTo: imageView.superview!.bottomAnchor).isActive = true
+        imageView.leadingAnchor.constraint(equalTo: imageView.superview!.leadingAnchor).isActive = true
+        imageView.trailingAnchor.constraint(equalTo: imageView.superview!.trailingAnchor).isActive = true
     }
     
     
@@ -85,9 +126,9 @@ public struct PiPVideoPlayer: UIViewControllerRepresentable {
     // Therefore the delegate methods for AVPlayerViewControllerDelegate must also be isolated on the main actor
     public class Coordinator: NSObject, @MainActor AVPlayerViewControllerDelegate {
         
-        @MainActor @Binding private var playerPresentationState: PiPVideoPlayerPresentation
+        @MainActor @Binding private var playerPresentationState: MultimediaPlayerPresentation
                 
-        init(playerPresentationState: Binding<PiPVideoPlayerPresentation>) {
+        init(playerPresentationState: Binding<MultimediaPlayerPresentation>) {
             self._playerPresentationState = playerPresentationState
         }
         
