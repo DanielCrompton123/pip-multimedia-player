@@ -12,6 +12,63 @@ It has 5 main advantages over the `VideoPlayer` view from the SwiftUI & AVKit br
 -  It publishes metadata including title, creator, and artwork, to the now playing info center in the lock screen
 - It handles audio files by displaying the thumbnail over the placeholder for `AVPlayerViewController`
 
+## Usage
+
+For `PiPMuiltimediaPlayer`, input the `AVPlayer`, multimedia type (audio or video), a binding to ther presentation state (that's either inline, PiP or full screen) and finall the metadata consisting of title, creator, and thumbnail (AKA artwork)
+
+### Example usage
+
+``` swift
+struct ContentView: View {
+    
+    let videoNum: String
+    @State private var player: AVPlayer?
+    @State private var playerPresentation = MultimediaPlayerPresentation.default
+    
+    var body: some View {
+        VStack {
+            
+            Group {
+                if let player {
+                    PiPMultimediaPlayer(
+                        player: player,
+                        multimediaType: .video,
+                        playerPresentationState: $playerPresentation,
+                        metadata: NowPlayingMetadata(
+                            title: "YouTube video name...",
+                            creator: "Video creator",
+                            thumbnail: UIImage(
+                                contentsOfFile: Bundle.main.url(forResource: "thumbnail", withExtension: "jpg")!
+                                    .path(percentEncoded: false)
+                            )!
+                        )
+                    )
+                } else {
+                    Text("Cannot load PiP video player at this time")
+                }
+            }
+            .aspectRatio(16/9, contentMode: .fit)
+            
+            Button("Skip to 1min") {
+                Task {
+                    await player?.currentItem?.seek(to: CMTimeMakeWithSeconds(60, preferredTimescale: 600))
+                }
+            }
+        }
+        .onAppear {
+            let videoName = "video" + videoNum
+            if let url = Bundle.main.url(forResource: videoName, withExtension: "mp4")  {
+                player = AVPlayer(url: url)
+            }
+        }
+        .onChange(of: playerPresentation) { oldValue, newValue in
+            print("Player presentation state changed to \(newValue)")
+        }
+    }
+}
+```
+
+
 ## Development
 I document my development experience in [this medium article](https://medium.com/@danielcrompton5/swiftui-video-audio-player-with-pip-now-playing-support-5b0b67da0db5). I also include links to my research so please read those as well!
 
