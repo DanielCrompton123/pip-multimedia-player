@@ -13,122 +13,28 @@ import MediaPlayer
 struct NowPlayingHelper {
     private init() { }
     
-    
-    static private var commandCentre: MPRemoteCommandCenter { .shared() }
-    static private var infoCentre: MPNowPlayingInfoCenter { .default() }
-    
-    
-    static func addCommands(for player: AudioPlayer) {
-        commandCentre.pauseCommand.addTarget { event in
-            player.pause()
-            return .success
-        }
-        commandCentre.playCommand.addTarget { event in
-            player.play()
-            return .success
-        }
-        commandCentre.togglePlayPauseCommand.addTarget { event in
-            player.togglePlayPause()
-            return .success
-        }
-        commandCentre.stopCommand.addTarget { event in
-            player.stop()
-            return .success
-        }
-        commandCentre.skipForwardCommand.addTarget { event in
-            player.skip()
-            return .success
-        }
-        commandCentre.skipBackwardCommand.addTarget { event in
-            player.backtrack()
-            return .success
-        }
+    static func publishMetadata(_ metadata: NowPlayingMetadata, to playerItem: AVPlayerItem) {
+        let creator = AVMutableMetadataItem()
+        creator.identifier = .commonIdentifierCreator
+        creator.value = metadata.creator as NSString
+        creator.extendedLanguageTag = "und"
         
-        commandCentre.skipForwardCommand.preferredIntervals = [player.backtrackSkipInterval.rawValue as NSNumber]
-        commandCentre.skipBackwardCommand.preferredIntervals = [player.backtrackSkipInterval.rawValue as NSNumber]
+        let title = AVMutableMetadataItem()
+        title.identifier = .commonIdentifierTitle
+        title.value = metadata.title as NSString
+        title.extendedLanguageTag = "und"
         
-        commandCentre.skipForwardCommand.addTarget {
-            guard let event = $0 as? MPSkipIntervalCommandEvent else { return .commandFailed }
-            player.seek(to: player.currentTime + event.interval)
-            return .success
-        }
-        
-        commandCentre.skipBackwardCommand.addTarget {
-            guard let event = $0 as? MPSkipIntervalCommandEvent else { return .commandFailed }
-            player.seek(to: player.currentTime + event.interval)
-            return .success
-        }
-        
-        commandCentre.changePlaybackPositionCommand.addTarget {
-            guard let event = $0 as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
-            player.seek(to: event.positionTime)
-            return .success
-        }
-
-    }
-    
-    static func addCommands(for player: AVPlayer) {
-        commandCentre.pauseCommand.addTarget { event in
-            player.pause()
-            return .success
-        }
-        commandCentre.playCommand.addTarget { event in
-            player.play()
-            return .success
-        }
-        commandCentre.togglePlayPauseCommand.addTarget { event in
-            switch player.timeControlStatus {
-                case .paused:
-                    player.play()
-                case .waitingToPlayAtSpecifiedRate:
-                    player.pause()
-                case .playing:
-                    player.pause()
-                @unknown default:
-                    return .commandFailed
-            }
-            return .success
-        }
-        commandCentre.stopCommand.addTarget { event in
-            player.replaceCurrentItem(with: nil)
-            return .success
-        }
-        
-        commandCentre.skipForwardCommand.addTarget {
-            guard let event = $0 as? MPSkipIntervalCommandEvent else { return .commandFailed }
-            player.seek(to: player.currentTime() + CMTime(seconds: event.interval, preferredTimescale: 600))
-            return .success
-        }
-        
-        commandCentre.skipBackwardCommand.addTarget {
-            guard let event = $0 as? MPSkipIntervalCommandEvent else { return .commandFailed }
-            player.seek(to: player.currentTime() - CMTime(seconds: event.interval, preferredTimescale: 600))
-            return .success
-        }
-        
-        commandCentre.changePlaybackPositionCommand.addTarget {
-            guard let event = $0 as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
-            player.seek(to: CMTime(seconds: event.timestamp, preferredTimescale: 600))
-            return .success
-        }
-    }
-    
-    static func removeCommands() {
-        // nil to remove all targets
-        commandCentre.pauseCommand.removeTarget(nil)
-        commandCentre.playCommand.removeTarget(nil)
-        commandCentre.stopCommand.removeTarget(nil)
-        commandCentre.togglePlayPauseCommand.removeTarget(nil)
-        commandCentre.skipForwardCommand.removeTarget(nil)
-        commandCentre.skipBackwardCommand.removeTarget(nil)
-    }
-    
-    static func updateNowPlayingData<M: MultimediaMetadata>(_ metadata: M) {
-        if infoCentre.nowPlayingInfo == nil {
-            infoCentre.nowPlayingInfo = metadata.dictionary
+        var artwork: AVMutableMetadataItem?
+        if let thumbnailData = metadata.thumbnail.pngData() {
+            artwork = AVMutableMetadataItem()
+            artwork!.identifier = .commonIdentifierArtwork
+            artwork!.value = thumbnailData as NSData
+            artwork!.dataType = kCMMetadataBaseDataType_PNG as String
+            artwork!.extendedLanguageTag = "und"
         } else {
-            infoCentre.nowPlayingInfo?.merging(metadata.dictionary, uniquingKeysWith: { (curr, new) in new })
+            print("[MultimediaPlayer: NowPlayingHelper.publishMetadata]: Cannot get the thumbnail's PNG data, so not adding the artwork to the now playing information")
         }
-        print("Now playing info dictionary set: \(infoCentre.nowPlayingInfo)")
+        
+        playerItem.externalMetadata = [creator, title, artwork].compactMap(\.self)
     }
 }

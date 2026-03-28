@@ -22,31 +22,6 @@ public enum PiPVideoPlayerPresentation: Sendable {
 }
 
 
-/*
-@MainActor
-class PiPVideoPlayerEventObserving: NSObject {
-    let player: AVPlayer
-    
-    init(player: AVPlayer) {
-        self.player = player
-    }
-    
-    private var observers: [NSKeyValueObservation] = []
-    
-    func startEventObserving() {
-        NotificationCenter.default.addObserver(self, selector: #selector(playedToEnd), name: AVPlayerItem.didPlayToEndTimeNotification, object: nil)
-    }
-    
-    
-    @objc private func playedToEnd() {
-        // Called when the notification triggers saying that the player has played to the end
-    }
-    
-}
-*/
-
-
-
 public struct PiPVideoPlayer: UIViewControllerRepresentable {
     
     private let player: AVPlayer
@@ -77,21 +52,19 @@ public struct PiPVideoPlayer: UIViewControllerRepresentable {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            print("[PiPVideoPlayer.makeUIViewController]: Cannot set audio session to playback movies & active: \(error)")
+            print("[MultimediaPlayer - PiPVideoPlayer.makeUIViewController]: Cannot set audio session to playback movies & active: \(error)")
         }
         
-        // Set up the now playing metadata
-        // Make sure this is set to false so that the player controller doesn't do anything funky with the now playing centre
-        playerController.updatesNowPlayingInfoCenter = false
-        NowPlayingHelper.addCommands(for: player)
-        NowPlayingHelper.updateNowPlayingData(metadata)
-        NowPlayingHelper.updateNowPlayingData(
-            NowPlayingDynamicData(
-                playbackDuration: player.currentItem?.duration.seconds ?? 0.0,
-                elapsedTime: player.currentTime().seconds,
-                playbackRate: player.rate
-            )
-        )
+//        playerController.updatesNowPlayingInfoCenter = false
+        // The default for this is true, so that the player controller will set the info center properties
+        // We want the player VC's player to manage the info center
+        
+        // We do however want to add the metadata to the player's currentItem, so the static details appear in the info center
+        if let item = player.currentItem {
+            NowPlayingHelper.publishMetadata(metadata, to: item)
+        } else {
+            print("[MultimediaPlayer - PiPVideoPlayer: Cannot get the player's current AVPlayerItem to set its metadata")
+        }
         
         return playerController
     }
@@ -101,7 +74,7 @@ public struct PiPVideoPlayer: UIViewControllerRepresentable {
     }
     
     
-    // MARK: Coordinator
+    // MARK: - Coordinator
     
     public func makeCoordinator() -> Coordinator {
         Coordinator(playerPresentationState: $playerPresentationState)
@@ -154,7 +127,7 @@ public struct PiPVideoPlayer: UIViewControllerRepresentable {
             _ playerViewController: AVPlayerViewController,
             failedToStartPictureInPictureWithError error: any Error
         ) {
-            print("[PiPVieoPlayer.playerViewControllerFailedToStartPictureInPictureWithError]: Error = \(error)")
+            print("[MultimediaPlayer - PiPVieoPlayer.playerViewControllerFailedToStartPictureInPictureWithError]: Error = \(error)")
         }
         @MainActor public func playerViewControllerWillStartPictureInPicture(_ playerViewController: AVPlayerViewController) {
         }
@@ -173,6 +146,3 @@ public struct PiPVideoPlayer: UIViewControllerRepresentable {
         }
     }
 }
- 
-
-
